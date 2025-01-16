@@ -40,6 +40,7 @@ async function run() {
     await client.connect();
     const db = client.db('SkyFlow');
     const userCollection = db.collection('users');
+    const apartmentCollection = db.collection('apartments');
 
     const cookieOptions = {
       httpOnly: true,
@@ -62,8 +63,6 @@ async function run() {
       }
     });
 
-
-
     //logout
     app.post('/logout', (req, res) => {
       res
@@ -72,14 +71,13 @@ async function run() {
         .json({ success: true, message: 'Logged out successfully' });
     });
 
-  
-
+    // user role set
     app.post('/users/:email', async (req, res) => {
       const email = req.params.email;
       const query = { email };
 
       const user = req.body;
-      console.log(email, query,user);
+      console.log(email, query, user);
       const isExist = await userCollection.findOne(query);
 
       if (isExist) {
@@ -94,6 +92,23 @@ async function run() {
       res.send(result);
     });
 
+    // apartments collection to home page data get
+    app.get('/apartments', async (req, res) => {
+      const result = await apartmentCollection
+        .find({})
+        .sort({ createdAt: -1 })
+        .project({
+          images: { $arrayElemAt: ['$images', 0] },
+          floorNo: 1,
+          blockNo: 1,
+          price: 1,
+          _id: 1,
+        })
+        .limit(6)
+        .toArray();
+      res.send(result);
+    });
+
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // // // Send a ping to confirm a successful connection
@@ -101,7 +116,6 @@ async function run() {
     // console.log(
     //   'Pinged your deployment. You successfully connected to MongoDB!'
     // );
-
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
