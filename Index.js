@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
 const morgan = require('morgan');
 const nodemailer = require('nodemailer');
@@ -102,10 +102,41 @@ async function run() {
           floorNo: 1,
           blockNo: 1,
           price: 1,
+          title: 1,
           _id: 1,
         })
         .limit(6)
         .toArray();
+      res.send(result);
+    });
+
+// **Paginated Apartments Route**
+app.get('/allapartments', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 2;
+    const skip = (page - 1) * limit;
+
+    const query = {}; // If you need filters, apply here
+    const total = await apartmentCollection.countDocuments(query);
+    const apartments = await apartmentCollection.find(query).skip(skip).limit(limit).toArray();
+
+    res.json({
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      data: apartments,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+    app.get('/apartments/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await apartmentCollection.findOne(query);
       res.send(result);
     });
 
