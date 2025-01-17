@@ -110,28 +110,55 @@ async function run() {
       res.send(result);
     });
 
-// **Paginated Apartments Route**
-app.get('/allapartments', async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = 2;
-    const skip = (page - 1) * limit;
-
-    const query = {}; // If you need filters, apply here
-    const total = await apartmentCollection.countDocuments(query);
-    const apartments = await apartmentCollection.find(query).skip(skip).limit(limit).toArray();
-
-    res.json({
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-      data: apartments,
+    // **Paginated Apartments Route**
+    app.get('/allapartments', async (req, res) => {
+      try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = 6;
+        const skip = (page - 1) * limit;
+    
+        // Log received query parameters
+        console.log("Received Query Params:", req.query);
+    
+        const query = {};
+    
+        // Check and apply rent filters
+        if (req.query.minRent) {
+          query.price = { $gte: parseInt(req.query.minRent) };
+        }
+        if (req.query.maxRent) {
+          query.price = { ...query.price, $lte: parseInt(req.query.maxRent) };
+        }
+    
+        console.log("Applied Query Filter:", query);
+    
+        const total = await apartmentCollection.countDocuments(query);
+        const apartments = await apartmentCollection
+          .find(query)
+          .skip(skip)
+          .limit(limit)
+          .project({
+            images: { $arrayElemAt: ['$images', 0] },
+            floorNo: 1,
+            blockNo: 1,
+            price: 1,
+            title: 1,
+            _id: 1,
+          })
+          .toArray();
+    
+        res.json({
+          total,
+          page,
+          totalPages: Math.ceil(total / limit),
+          data: apartments,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Server Error' });
+      }
     });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Server Error' });
-  }
-});
+    
 
     app.get('/apartments/:id', async (req, res) => {
       const id = req.params.id;
