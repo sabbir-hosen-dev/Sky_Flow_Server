@@ -11,7 +11,7 @@ const port = process.env.PORT || 9000;
 const app = express();
 
 const corsOptions = {
-  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  origin: ['http://localhost:5173','https://skyflow-277.web.app', 'http://localhost:5174'],
   credentials: true,
   optionSuccessStatus: 200,
 };
@@ -35,12 +35,59 @@ const client = new MongoClient(uri, {
 
 const secrectKey = process.env.SECRECT_KEY;
 
+const verifyToken = (req, res, next) => {
+  const token = req.cookies.token;
+
+  if (!token) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  jwt.verify(token, secrectKey, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    req.user = decoded;
+    next();
+  });
+};
+
+
+
+
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const db = client.db('SkyFlow');
     const userCollection = db.collection('users');
     const apartmentCollection = db.collection('apartments');
+    const agreementCollection = db.collection('acgeement');
+        // verify admin middleware
+        const verifyAdmin = async (req, res, next) => {
+          // console.log('data from verifyToken middleware--->', req.user?.email)
+          const email = req.user?.email
+          const query = { email }
+          const result = await userCollection.findOne(query)
+          if (!result || result?.role !== 'admin')
+            return res
+              .status(403)
+              .send({ message: 'Forbidden Access! Admin Only Actions!' })
+    
+          next()
+        }
+
+        const verifyMember = async (req,res, next) => {
+          const email = req.user?.email ;
+          const query = {email}
+          const result = await userCollection.findOne(query);
+
+          if(!result || result?.role !== "member")  {
+            return res.status(403)
+            .send({ message: 'Forbidden Access! Admin Only Actions!' })
+           
+          }
+          next()
+        }
 
     const cookieOptions = {
       httpOnly: true,
@@ -77,7 +124,6 @@ async function run() {
       const query = { email };
 
       const user = req.body;
-      console.log(email, query, user);
       const isExist = await userCollection.findOne(query);
 
       if (isExist) {
@@ -91,6 +137,15 @@ async function run() {
       });
       res.send(result);
     });
+
+    // user role Check
+    app.get("/users/role/:email" , async (req, res) => {
+      const email = req.params.email;
+      const result = await userCollection.findOne({email : email});
+      console.log({role : result.role})
+      res.send({role : result.role})
+    })
+
 
     // apartments collection to home page data get
     app.get('/apartments', async (req, res) => {
@@ -114,14 +169,14 @@ async function run() {
     app.get('/allapartments', async (req, res) => {
       try {
         const page = parseInt(req.query.page) || 1;
-        const limit = 6;
+        const limit = 4;
         const skip = (page - 1) * limit;
-    
+
         // Log received query parameters
-        console.log("Received Query Params:", req.query);
-    
+        console.log('Received Query Params:', req.query);
+
         const query = {};
-    
+
         // Check and apply rent filters
         if (req.query.minRent) {
           query.price = { $gte: parseInt(req.query.minRent) };
@@ -129,9 +184,9 @@ async function run() {
         if (req.query.maxRent) {
           query.price = { ...query.price, $lte: parseInt(req.query.maxRent) };
         }
-    
-        console.log("Applied Query Filter:", query);
-    
+
+        console.log('Applied Query Filter:', query);
+
         const total = await apartmentCollection.countDocuments(query);
         const apartments = await apartmentCollection
           .find(query)
@@ -146,7 +201,7 @@ async function run() {
             _id: 1,
           })
           .toArray();
-    
+
         res.json({
           total,
           page,
@@ -158,14 +213,88 @@ async function run() {
         res.status(500).json({ error: 'Server Error' });
       }
     });
-    
 
+    // single apartment data get
     app.get('/apartments/:id', async (req, res) => {
+      console.log('hi');
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await apartmentCollection.findOne(query);
       res.send(result);
     });
+
+
+    // appertment request to sotre data base request
+    app.post('/agreement', verifyToken, async (req, res) => {
+      try {
+        const email = req.query.email;
+        const data = req.body;
+
+    
+        // Find the user by email
+        const user = await userCollection.findOne({ email: email });
+    
+        if (!user) {
+          return res.status(403).send({ message: 'User not found' });
+        }
+    
+        // Check if the user is an admin
+        if (user.role === 'admin') {
+          return res.send({
+            message: 'Admin cannot make an agreement request',
+            status: 'admin',
+          });
+        }
+    
+        // Check if the user already has a pending agreement request
+        const existingAgreement = await agreementCollection.findOne({
+          email: email,
+        });
+    
+        if (existingAgreement) {
+          return res.send({
+            message: 'You already have  agreement request',
+            status: 'isExist',
+          });
+        }
+    
+        // Insert new agreement request
+        const newAgreement = {
+          ...data,
+          email,
+          createdAt: new Date(),
+        };
+    
+        const result = await agreementCollection.insertOne(newAgreement);
+    
+        if (result.insertedId) {
+          return res.status(201).send({
+            message: 'Agreement request submitted successfully',
+          });
+        } else {
+          return res.status(500).send({
+            message: 'Failed to submit agreement request',
+          });
+        }
+      } catch (error) {
+        console.error('Error handling agreement request:', error);
+        res.status(500).send({ message: 'Internal server error' });
+      }
+    });
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
