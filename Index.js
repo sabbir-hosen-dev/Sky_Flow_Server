@@ -143,9 +143,59 @@ async function run() {
     app.get('/users/role/:email', async (req, res) => {
       const email = req.params.email;
       const result = await userCollection.findOne({ email: email });
-      console.log({ role: result.role });
+      // console.log({ role: result.role });
       res.send({ role: result.role });
     });
+
+    //admin delete a member
+    app.patch(
+      '/user/role-update/:id',
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const email = req.query.email;
+
+          const findAgreement = { 
+            email: email, 
+            status: "approved" 
+          }
+          const updateAgreement = await agreementCollection.updateOne(findAgreement, {
+            $set: { status: "rejected" }
+          });
+
+          const result = await userCollection.updateOne(
+            { _id: new ObjectId(id) }, // ✅ _id ফিল্ড ঠিক করা হয়েছে
+            { $set: { role: 'user' } } // ✅ $set অপারেটর যোগ করা হয়েছে
+          );
+          res.send(result);
+        } catch (error) {
+          res.status(500).send({ error: 'Failed to update role' });
+        }
+      }
+    );
+    
+
+    //get all member
+    app.get('/members', verifyToken, verifyAdmin, async (req, res) => {
+      const result = await userCollection.find({ role: 'member' }).toArray();
+      // console.log(result)
+      res.send(result);
+    });
+
+    //get all agreement requests
+    app.get(
+      '/agreements/request',
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const result = await agreementCollection
+          .find({ status: 'pending' })
+          .toArray();
+        res.send(result);
+      }
+    );
 
     // apartments collection to home page data get
     app.get('/apartments', async (req, res) => {
@@ -173,7 +223,7 @@ async function run() {
         const skip = (page - 1) * limit;
 
         // Log received query parameters
-        console.log('Received Query Params:', req.query);
+        // console.log('Received Query Params:', req.query);
 
         const query = {};
 
@@ -185,7 +235,7 @@ async function run() {
           query.price = { ...query.rent, $lte: parseInt(req.query.maxRent) };
         }
 
-        console.log('Applied Query Filter:', query);
+        // console.log('Applied Query Filter:', query);
 
         const total = await apartmentCollection.countDocuments(query);
         const apartments = await apartmentCollection
@@ -216,7 +266,7 @@ async function run() {
 
     // single apartment data get
     app.get('/apartments/:id', async (req, res) => {
-      console.log('hi');
+      // console.log('hi');
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await apartmentCollection.findOne(query);
@@ -228,14 +278,14 @@ async function run() {
       try {
         const email = req.query.email;
         const data = req.body;
-    
+
         // Find the user by email
         const user = await userCollection.findOne({ email: email });
-    
+
         if (!user) {
           return res.status(403).send({ message: 'User not found' });
         }
-    
+
         // Check if the user is an admin
         if (user.role === 'admin') {
           return res.send({
@@ -243,7 +293,7 @@ async function run() {
             status: 'admin',
           });
         }
-    
+
         // Check if the user is already a member
         if (user.role === 'member') {
           return res.send({
@@ -251,12 +301,18 @@ async function run() {
             status: 'alreadyMember',
           });
         }
-    
+
         // Check if the user already has an agreement request
-        const existingAgreement = await agreementCollection.findOne({ email: email });
-    
+        const existingAgreement = await agreementCollection.findOne({
+          email: email,
+        });
+
         if (existingAgreement) {
-          if (existingAgreement.status === 'pending' || existingAgreement.status === 'booked' || existingAgreement.status === 'checked') {
+          if (
+            existingAgreement.status === 'pending' ||
+            existingAgreement.status === 'booked' ||
+            existingAgreement.status === 'checked'
+          ) {
             return res.send({
               message: 'You already have an active agreement request',
               status: 'isExist',
@@ -271,7 +327,7 @@ async function run() {
             });
           }
         }
-    
+
         // Insert new agreement request
         const newAgreement = {
           ...data,
@@ -279,9 +335,9 @@ async function run() {
           agreementDate: new Date(),
           status: 'pending', // Default status
         };
-    
+
         const result = await agreementCollection.insertOne(newAgreement);
-    
+
         if (result.insertedId) {
           return res.status(201).send({
             message: 'Agreement request submitted successfully',
@@ -296,9 +352,6 @@ async function run() {
         res.status(500).send({ message: 'Internal server error' });
       }
     });
-    
-    
-    
 
     //get all agreement requests
     app.get(
@@ -321,7 +374,13 @@ async function run() {
       async (req, res) => {
         try {
           const id = req.params.id;
-          const { email, status } = req.body; 
+          const { email, status } = req.body;
+
+          // console.log(email, status);
+
+          if (!email) {
+            return res.status(400).json({ message: 'Email is required' });
+          }
 
           const existingUser = await userCollection.findOne({ email });
           if (existingUser?.role === 'member') {
@@ -330,7 +389,7 @@ async function run() {
             });
           }
 
-          if (status === 'accepted') {
+          if (status === 'approved') {
             await userCollection.updateOne(
               { email },
               { $set: { role: 'member' } }
@@ -339,7 +398,7 @@ async function run() {
 
           const result = await agreementCollection.updateOne(
             { _id: new ObjectId(id) },
-            { $set: { status } }
+            { $set: { status, apartmentsId: id } }
           );
 
           if (result.modifiedCount > 0) {
@@ -354,31 +413,41 @@ async function run() {
       }
     );
 
+    //rejected id
+    app.patch(
+      '/agreements/reject/:id',
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
 
-
-    app.patch("/agreements/reject/:id", verifyToken, verifyAdmin, async (req, res) => {
-      const id = req.params.id;
-  
-      try {
+        try {
           const filter = { _id: new ObjectId(id) };
           const updateDoc = {
-              $set: { status: "rejected" } // Agreement status update to 'rejected'
+            $set: { status: 'rejected' }, // Agreement status update to 'rejected'
           };
-  
+
           const result = await agreementCollection.updateOne(filter, updateDoc);
-  
+
           if (result.modifiedCount > 0) {
-              return res.status(200).json({ success: true, message: "Agreement rejected successfully." });
+            return res.status(200).json({
+              success: true,
+              message: 'Agreement rejected successfully.',
+            });
           } else {
-              return res.status(400).json({ success: false, message: "Agreement not found or already rejected." });
+            return res.status(400).json({
+              success: false,
+              message: 'Agreement not found or already rejected.',
+            });
           }
-      } catch (error) {
-          console.error("Error rejecting agreement:", error);
-          return res.status(500).json({ success: false, message: "Internal server error." });
+        } catch (error) {
+          console.error('Error rejecting agreement:', error);
+          return res
+            .status(500)
+            .json({ success: false, message: 'Internal server error.' });
+        }
       }
-  });
-  
-    
+    );
 
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
