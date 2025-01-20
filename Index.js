@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const Stripe = require('stripe');
 const cookieParser = require('cookie-parser');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
@@ -9,6 +10,7 @@ const nodemailer = require('nodemailer');
 
 const port = process.env.PORT || 9000;
 const app = express();
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const corsOptions = {
   origin: [
@@ -63,6 +65,7 @@ async function run() {
     const userCollection = db.collection('users');
     const apartmentCollection = db.collection('apartments');
     const agreementCollection = db.collection('agreements');
+    const couponCollection = db.collection("coupons");
     // verify admin middleware
     const verifyAdmin = async (req, res, next) => {
       // console.log('data from verifyToken middleware--->', req.user?.email)
@@ -157,13 +160,16 @@ async function run() {
           const id = req.params.id;
           const email = req.query.email;
 
-          const findAgreement = { 
-            email: email, 
-            status: "approved" 
-          }
-          const updateAgreement = await agreementCollection.updateOne(findAgreement, {
-            $set: { status: "rejected" }
-          });
+          const findAgreement = {
+            email: email,
+            status: 'approved',
+          };
+          const updateAgreement = await agreementCollection.updateOne(
+            findAgreement,
+            {
+              $set: { status: 'rejected' },
+            }
+          );
 
           const result = await userCollection.updateOne(
             { _id: new ObjectId(id) }, // ✅ _id ফিল্ড ঠিক করা হয়েছে
@@ -175,7 +181,8 @@ async function run() {
         }
       }
     );
-    
+
+    app.get("/memberData")
 
     //get all member
     app.get('/members', verifyToken, verifyAdmin, async (req, res) => {
@@ -374,7 +381,12 @@ async function run() {
       async (req, res) => {
         try {
           const id = req.params.id;
-          const { email, status } = req.body;
+          const {
+            email,
+            status,
+
+            apartmentId,
+          } = req.body;
 
           // console.log(email, status);
 
@@ -388,6 +400,13 @@ async function run() {
               message: 'This user is already a member and renting a room.',
             });
           }
+
+          const updateApartmentStatus = await apartmentCollection.updateOne(
+            { _id: new ObjectId(apartmentId) },
+            {
+              $set: { status: 'rented' },
+            }
+          );
 
           if (status === 'approved') {
             await userCollection.updateOne(
@@ -448,6 +467,62 @@ async function run() {
         }
       }
     );
+
+    app.get('/users/profile', verifyToken, async (req, res) => {
+      const email = req.query.email;
+
+      const findApotment = {
+        email: email,
+        status: 'approved',
+      };
+      const agrementDetails = await agreementCollection.findOne(findApotment);
+
+      res.send(agrementDetails);
+    });
+
+    //payment seystem
+    app.post('/create-payment-intent', verifyToken, async (req, res) => {
+      try {
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: req.body.amount, // amount in cents
+          currency: 'usd',
+        });
+        res.send({
+          clientSecret: paymentIntent.client_secret,
+          paymentId: paymentIntent.id,
+        });
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
+    });
+
+    //get all coupons
+    app.get("/coupons", async (req,res) => {
+      const result = await couponCollection.find().toArray();
+      res.send(result);
+    })
+
+    //couponn validation 
+    app.get('/coupons/:code', async (req, res) => {
+      try {
+        const { code } = req.params;
+        const coupon = await couponCollection.findOne({ couponCode: code });
+    
+        if (!coupon) {
+          return res.status(404).json({ message: "Invalid coupon code" });
+        }
+    
+        if (!coupon.isActive) {
+          return res.status(400).json({ message: "This coupon is not active" });
+        }
+    
+        res.json({ discountPercentage: coupon.discountPercentage, description: coupon.description });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    
+    
 
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
