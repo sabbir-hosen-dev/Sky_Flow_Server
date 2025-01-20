@@ -1,7 +1,7 @@
 
 # Sky Flow - Backend
 
-This is the backend for the **Sabbir Project**, a full-stack user management system, built with Express, MongoDB, and integrated with Stripe for payment processing. The system includes features for user management, apartment bookings, agreements, and role-based access control.
+This is the backend for the **Sky Flow**, a full-stack building management system, built with Express, MongoDB, and integrated with Stripe for payment processing. The system includes features for user management, apartment bookings, agreements, and role-based access control.
 
 ## Features
 
