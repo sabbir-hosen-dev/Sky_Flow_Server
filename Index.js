@@ -66,6 +66,7 @@ async function run() {
     const apartmentCollection = db.collection('apartments');
     const agreementCollection = db.collection('agreements');
     const couponCollection = db.collection("coupons");
+    const paymentCollection = db.collection("payments");
     // verify admin middleware
     const verifyAdmin = async (req, res, next) => {
       // console.log('data from verifyToken middleware--->', req.user?.email)
@@ -521,6 +522,28 @@ async function run() {
         res.status(500).json({ error: error.message });
       }
     });
+
+    //payment deatails save database
+    app.post("/payments/save", verifyToken,verifyMember, async (req,res) => {
+      const data =req.body;
+      const result = await paymentCollection.insertOne(data);
+      res.send(result)
+    } )
+
+    //payment history 
+    app.get("/payment-history", verifyToken, verifyMember, async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+    
+      console.log("Requesting payment history for:", email);
+      const result = await paymentCollection.find({ userEmail : email }).toArray();
+      
+      // console.log("Payment History Result:", result);
+      res.send(result);
+    });
+    
     
     
 
