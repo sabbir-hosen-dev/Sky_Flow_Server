@@ -65,8 +65,9 @@ async function run() {
     const userCollection = db.collection('users');
     const apartmentCollection = db.collection('apartments');
     const agreementCollection = db.collection('agreements');
-    const couponCollection = db.collection("coupons");
-    const paymentCollection = db.collection("payments");
+    const couponCollection = db.collection('coupons');
+    const paymentCollection = db.collection('payments');
+    const announcementsCollection = db.collection('announcements');
     // verify admin middleware
     const verifyAdmin = async (req, res, next) => {
       // console.log('data from verifyToken middleware--->', req.user?.email)
@@ -183,7 +184,7 @@ async function run() {
       }
     );
 
-    app.get("/memberData")
+    app.get('/memberData');
 
     //get all member
     app.get('/members', verifyToken, verifyAdmin, async (req, res) => {
@@ -498,55 +499,124 @@ async function run() {
     });
 
     //get all coupons
-    app.get("/coupons", async (req,res) => {
+    app.get('/coupons', async (req, res) => {
       const result = await couponCollection.find().toArray();
       res.send(result);
-    })
+    });
 
-    //couponn validation 
+    //couponn validation
     app.get('/coupons/:code', async (req, res) => {
       try {
         const { code } = req.params;
         const coupon = await couponCollection.findOne({ couponCode: code });
-    
+
         if (!coupon) {
-          return res.status(404).json({ message: "Invalid coupon code" });
+          return res.status(404).json({ message: 'Invalid coupon code' });
         }
-    
+
         if (!coupon.isActive) {
-          return res.status(400).json({ message: "This coupon is not active" });
+          return res.status(400).json({ message: 'This coupon is not active' });
         }
-    
-        res.json({ discountPercentage: coupon.discountPercentage, description: coupon.description });
+
+        res.json({
+          discountPercentage: coupon.discountPercentage,
+          description: coupon.description,
+        });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
 
     //payment deatails save database
-    app.post("/payments/save", verifyToken,verifyMember, async (req,res) => {
-      const data =req.body;
+    app.post('/payments/save', verifyToken, verifyMember, async (req, res) => {
+      const data = req.body;
       const result = await paymentCollection.insertOne(data);
-      res.send(result)
-    } )
+      res.send(result);
+    });
 
-    //payment history 
-    app.get("/payment-history", verifyToken, verifyMember, async (req, res) => {
+    //payment history
+    app.get('/payment-history', verifyToken, verifyMember, async (req, res) => {
       const email = req.query.email;
       if (!email) {
-        return res.status(400).json({ message: "Email is required" });
+        return res.status(400).json({ message: 'Email is required' });
       }
-    
-      console.log("Requesting payment history for:", email);
-      const result = await paymentCollection.find({ userEmail : email }).toArray();
-      
+
+      console.log('Requesting payment history for:', email);
+      const result = await paymentCollection
+        .find({ userEmail: email })
+        .toArray();
+
       // console.log("Payment History Result:", result);
       res.send(result);
     });
+
+    // get all /announcement
+    app.get('/announcement/', async (req, res) => {
+      const result = await announcementsCollection.find().toArray();
+      res.send(result);
+    });
+
+    //post a new /announcement
+    app.post('/announcement', verifyToken, verifyAdmin, async (req, res) => {
+      const data = req.body;
+      const reasult = await announcementsCollection.insertOne(data);
+      res.send(reasult);
+    });
+
+    // /announcement deaete a /announcement
+    app.delete("/announcement/:id", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        console.log("Deleting announcement with ID:", id);
     
+        const result = await announcementsCollection.deleteOne({ _id: new ObjectId(id) });
     
+        if (result.deletedCount === 1) {
+          res.send({ success: true, message: "Announcement deleted successfully!" });
+        } else {
+          res.status(404).send({ success: false, message: "Announcement not found!" });
+        }
+      } catch (error) {
+        console.error("Delete error:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+      }
+    });
+    
+    // single announcement data get 
+    app.get("/announcement/:id", async (req,res) => {
+      const id = req.params.id;
+      const result = await announcementsCollection.findOne({_id : new ObjectId(id)})
+      res.send(result)
+    })
+
+    // announcemetn edit 
+    app.patch("/announcement/:id", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const data = req.body;
+        
+        // Ensure ID is correctly formatted
+        const objectId = new ObjectId(id);
+    
+        // Update announcement in the database
+        const result = await announcementsCollection.updateOne(
+          { _id: objectId },
+          { $set: data } // Update only the fields sent in the request
+        );
+    
+        if (result.modifiedCount > 0) {
+          res.json({ success: true, message: "Announcement updated successfully!" });
+        } else {
+          res.status(404).json({ success: false, message: "No announcement found or no changes made." });
+        }
+      } catch (error) {
+        console.error("Error updating announcement:", error);
+        res.status(500).json({ success: false, message: "Internal server error." });
+      }
+    });
     
 
+    
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // // // Send a ping to confirm a successful connection
