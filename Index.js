@@ -17,6 +17,7 @@ const corsOptions = {
     'http://localhost:5173',
     'https://skyflow-277.web.app',
     'http://localhost:5174',
+    'https://skyflow-277.firebaseapp.com'
   ],
   credentials: true,
   optionSuccessStatus: 200,
@@ -151,6 +152,18 @@ async function run() {
       // console.log({ role: result.role });
       res.send({ role: result.role });
     });
+
+    // get all user 
+    app.get("/all-users", async (req, res) => {
+      try {
+        const users = await userCollection.find({ role: { $ne: "admin" } }).toArray();
+        res.send(users);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    
 
     //admin delete a member
     app.patch(
@@ -562,6 +575,12 @@ async function run() {
       const reasult = await announcementsCollection.insertOne(data);
       res.send(reasult);
     });
+    //post a new /coupon
+    app.post('/coupons', verifyToken, verifyAdmin, async (req, res) => {
+      const data = req.body;
+      const reasult = await couponCollection.insertOne(data);
+      res.send(reasult);
+    });
 
     // /announcement deaete a /announcement
     app.delete("/announcement/:id", verifyToken, verifyAdmin, async (req, res) => {
@@ -581,11 +600,54 @@ async function run() {
         res.status(500).send({ success: false, message: "Internal Server Error" });
       }
     });
+  
+
+    // get all apoatments 
+    app.get("/all-apartments", async (req, res) => {
+      try {
+        const result = await apartmentCollection.find().toArray();
+        // console.log(result);
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching apartments:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
     
+    
+    // /Coupons  deaete a coupon
+    app.delete("/coupons/:id", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        console.log("Deleting announcement with ID:", id);
+    
+        const result = await couponCollection.deleteOne({ _id: new ObjectId(id) });
+    
+        if (result.deletedCount === 1) {
+          res.send({ success: true, message: "Coupon deleted successfully!" });
+        } else {
+          res.status(404).send({ success: false, message: "Coupon not found!" });
+        }
+      } catch (error) {
+        console.error("Delete error:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+      }
+    });
+    
+
     // single announcement data get 
     app.get("/announcement/:id", async (req,res) => {
       const id = req.params.id;
       const result = await announcementsCollection.findOne({_id : new ObjectId(id)})
+      res.send(result)
+    })
+
+    // Coupon data get 
+    app.get("/single-coupon/:id", async (req,res) => {
+      const id = req.params.id;
+      console.log(id,"hit")
+      const result = await couponCollection.findOne({_id : new ObjectId(id)})
+      console.log(result)
       res.send(result)
     })
 
@@ -614,9 +676,35 @@ async function run() {
         res.status(500).json({ success: false, message: "Internal server error." });
       }
     });
+
+    // Coupons edit 
+    app.patch("/coupons/:id", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const data = req.body;
+        
+        // Ensure ID is correctly formatted
+        const objectId = new ObjectId(id);
+    
+        // Update coupons in the database
+        const result = await couponCollection.updateOne(
+          { _id: objectId },
+          { $set: data } // Update only the fields sent in the request
+        );
+    
+        if (result.modifiedCount > 0) {
+          res.json({ success: true, message: "Coupon updated successfully!" });
+        } else {
+          res.status(404).json({ success: false, message: "No Coupon found or no changes made." });
+        }
+      } catch (error) {
+        console.error("Error updating Coupons:", error);
+        res.status(500).json({ success: false, message: "Internal server error." });
+      }
+    });
     
 
-    
+
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // // // Send a ping to confirm a successful connection
