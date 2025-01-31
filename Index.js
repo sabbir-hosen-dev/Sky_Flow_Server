@@ -243,23 +243,32 @@ async function run() {
         const page = parseInt(req.query.page) || 1;
         const limit = 6;
         const skip = (page - 1) * limit;
-
-        // Log received query parameters
-        // console.log('Received Query Params:', req.query);
-
+    
         const query = {};
-
-        // Check and apply rent filters
-        if (req.query.minRent) {
-          query.price = { $gte: parseInt(req.query.minRent) };
+    
+        // Correct filter merging
+        if (req.query.minRent || req.query.maxRent) {
+          console.log("Filtering by rent...");
+          query.rent = {};  // Initialize the rent field in the query object
+    
+          // Apply minimum rent filter if provided
+          if (req.query.minRent && req.query.minRent !== '') {
+            query.rent.$gte = parseInt(req.query.minRent);  // $gte: greater than or equal
+          }
+    
+          // Apply maximum rent filter if provided
+          if (req.query.maxRent && req.query.maxRent !== '') {
+            query.rent.$lte = parseInt(req.query.maxRent);  // $lte: less than or equal
+          }
         }
-        if (req.query.maxRent) {
-          query.price = { ...query.rent, $lte: parseInt(req.query.maxRent) };
-        }
-
-        // console.log('Applied Query Filter:', query);
-
+    
+        // Log the applied rent filter values
+        console.log("Rent filter values:", req.query.minRent, req.query.maxRent, query);
+    
+        // Fetch the total number of apartments matching the query
         const total = await apartmentCollection.countDocuments(query);
+    
+        // Fetch the apartments with pagination and the constructed filter
         const apartments = await apartmentCollection
           .find(query)
           .skip(skip)
@@ -273,7 +282,10 @@ async function run() {
             _id: 1,
           })
           .toArray();
-
+    
+        console.log("Apartments found:", apartments.length);
+    
+        // Respond with the data, total count, and pagination information
         res.json({
           total,
           page,
@@ -285,6 +297,10 @@ async function run() {
         res.status(500).json({ error: 'Server Error' });
       }
     });
+    
+    
+    
+    
 
     // single apartment data get
     app.get('/apartments/:id', async (req, res) => {
